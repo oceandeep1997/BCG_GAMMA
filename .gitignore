@@ -1,5 +1,7 @@
 # Heavy data file
-data/*
+data/raw_data/*
+data/img/*
+data/results/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

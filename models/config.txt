@@ -1,0 +1,13 @@
+[path]
+data=../data/
+raw_data=../data/raw_data
+transactions_dataset=../data/raw_data/transactions_dataset.pickle
+results=../data/results
+img=../data/img
+profile_thresholds=../models/profile_thresholds.json
+
+[client_segmentation]
+save_raw_distributions=True
+save_labeled_distributions=True
+save_labeled_df_rfm=True
+save_labels_graphs=True
