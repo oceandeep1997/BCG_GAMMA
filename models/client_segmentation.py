@@ -7,6 +7,10 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 import squarify
 import configparser
 import json
+import os
+import datetime
+import warnings
+warnings.simplefilter("ignore")
 
 parser = configparser.ConfigParser()
 parser.read("config.txt")
@@ -58,9 +62,24 @@ def labelize(df_rfm: pd.DataFrame, profile_thresholds:dict) -> pd.DataFrame:
         df_rfm = assign_label(df_rfm, v['r'], v['f'], k)
     return df_rfm
 
+def create_analysis_for_graphs(df_rfm: pd.DataFrame, agg_dict:dict=None) -> pd.DataFrame:
+    if agg_dict is None:
+        agg_dict = {
+            'client_id': 'count',
+            'recency': 'mean',
+            'frequency': 'mean',
+            'monetary': 'sum'
+        }
+    df_analysis = df_rfm.groupby('rfm_label').agg(agg_dict).sort_values(by='recency').reset_index()
+    df_analysis.rename({'rfm_label': 'label', 'client_id': 'count'}, axis=1, inplace=True)
+    df_analysis['count_share'] = df_analysis['count'] / df_analysis['count'].sum()
+    df_analysis['monetary_share'] = df_analysis['monetary'] / df_analysis['monetary'].sum()
+    df_analysis['monetary'] = df_analysis['monetary'] / df_analysis['count']    
+    return df_analysis
 
 if __name__ == "__main__":
-    
+    print('Starting job!')
+    print(' > creating the RFM dataset...')
     with open(parser['path']['profile_thresholds']) as json_file:
         profile_thresholds = json.load(json_file)
     transactions = load_pickle(parser['path']['transactions_dataset'])
@@ -68,15 +87,48 @@ if __name__ == "__main__":
                          .pipe(log_scale_df_rfm_features) \
                          .pipe(create_rfm_scores) \
                          .pipe(labelize, profile_thresholds)
-    print(df_rfm)
+    print(' > RFM dataset created...')
+    if any([
+        parser['client_segmentation']['save_raw_distributions'],
+        parser['client_segmentation']['save_labeled_distributions'],
+        parser['client_segmentation']['save_labeled_df_rfm'],
+        parser['client_segmentation']['save_labels_graphs']
+        ]):
+        print(' > making new folder in data/results/ ...')
+        datetime_token = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+        folder_path = "../data/results/" + datetime_token
+        os.mkdir(folder_path)
+        rfm_features = ['recency', 'frequency', 'monetary']
+        print(' >', datetime_token, 'folder created in data/results/ ...')
+        print(' > saving data and images...')
     if parser['client_segmentation']['save_raw_distributions']:
-        pass
-
+        for feature in rfm_features:
+            fig, ax = plt.subplots(figsize=(12,3), facecolor='white')
+            sns.distplot(df_rfm[feature])
+            ax.set_title('Distribution of %s' % feature)
+            plt.savefig(folder_path + '/raw_distrib_' + feature + '.png', format='png')
+    
     if parser['client_segmentation']['save_labeled_distributions']:
-        pass
+        segments = ['loyal customers', 'hibernating', 'potential loyalist']
+        for feature in rfm_features:
+            fig, ax = plt.subplots(figsize=(12,3), facecolor='white')
+            for segment in segments:
+                sns.distplot(df_rfm[df_rfm['rfm_label']==segment][feature], label=segment)
+            ax.set_title('Distribution of %s' % feature)
+            plt.legend()
+            plt.savefig(folder_path + '/labeled_distrib_' + feature + '.png', format='png')
 
     if parser['client_segmentation']['save_labeled_df_rfm']:
-        pass
+        df_rfm.to_csv(folder_path + '/client_base_with_label.csv')
 
     if parser['client_segmentation']['save_labels_graphs']:
-        pass
+        colors = ['#37BEB0', '#DBF5F0', '#41729F', '#C3E0E5', '#0C6170', '#5885AF', '#E1C340', '#274472', '#F8EA8C', '#A4E5E0', '#1848A0']
+        df_analysis = create_analysis_for_graphs(df_rfm)
+        for dimension in ['count', 'monetary']:
+            labels = df_analysis['label'] + df_analysis[dimension + '_share'].apply(lambda x: ' ({0:.1f}%)'.format(x*100))
+            fig, ax = plt.subplots(figsize=(16,6))
+            squarify.plot(sizes=df_analysis[dimension], label=labels, alpha=.8, color=colors)
+            ax.set_title('RFM Segments of Customers (%s)' % dimension)
+            plt.axis('off')
+            plt.savefig(folder_path + '/labels_graph_' + dimension + '.png', format='png')
+    print('Job done!')

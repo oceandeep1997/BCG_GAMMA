@@ -1,7 +1,7 @@
 # Heavy data file
-data/raw_data/*
-data/img/*
-data/results/*
+*.pickle
+*.csv
+*.xlsx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
